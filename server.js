@@ -1,56 +1,133 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const { google } = require('googleapis');
+const fs = require('fs');
+const cors = require('cors');
+
 const app = express();
-const PORT = process.env.PORT || 3000;
+app.use(cors());
+const PORT = process.env.PORT || 4000;
 
-async function checkNetflixTrial() {
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  const page = await browser.newPage();
-  await page.goto('https://www.netflix.com/signup', { waitUntil: 'domcontentloaded' });
+// Authenticate Google Sheets API
+const auth = new google.auth.GoogleAuth({
+  keyFile: './credentials.json',
+  scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+});
+const sheets = google.sheets({ version: 'v4', auth });
 
-  const bodyText = await page.evaluate(() => document.body.innerText);
-  const hasTrial = /free trial/i.test(bodyText);
-
-  await browser.close();
-  return { service: "Netflix", trial_available: hasTrial, region: "US" };
-}
-
-async function checkHuluTrial() {
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  const page = await browser.newPage();
-  await page.goto('https://www.hulu.com/start', { waitUntil: 'domcontentloaded' });
-
-  const bodyText = await page.evaluate(() => document.body.innerText);
-  const hasTrial = /free trial/i.test(bodyText);
-
-  await browser.close();
-  return { service: "Hulu", trial_available: hasTrial, region: "US" };
-}
-
-async function checkDisneyTrial() {
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  const page = await browser.newPage();
-  await page.goto('https://www.disneyplus.com', { waitUntil: 'domcontentloaded' });
-
-  const bodyText = await page.evaluate(() => document.body.innerText);
-  const hasTrial = /free trial/i.test(bodyText);
-
-  await browser.close();
-  return { service: "Disney+", trial_available: hasTrial, region: "US" };
-}
+const SPREADSHEET_ID = '1jc_BuWam_WzjS0LUvdBkfg_CLQz82LhCqhW3TtSf65A';
+const SHEET_NAME = 'Sheet1';
 
 app.get('/api/streaming-trials', async (req, res) => {
   try {
-    const results = await Promise.all([
-      checkNetflixTrial(),
-      checkHuluTrial(),
-      checkDisneyTrial()
-    ]);
-    res.json(results);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Failed to check trial availability' });
+    const authClient = await auth.getClient();
+
+    const result = await sheets.spreadsheets.values.get({
+      auth: authClient,
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${SHEET_NAME}!A2:E`
+    });
+
+    const rows = result.data.values;
+
+    if (!rows || rows.length === 0) {
+      return res.status(200).json({ message: 'No data found' });
+    }
+
+    const response = rows.map((row) => ({
+      service: row[0],
+      trialStatus: row[1],
+      trialLastSeen: row[2],
+      notes: row[3] || '',
+      alertSent: row[4] === 'TRUE'
+    }));
+
+    res.status(200).json(response);
+
+  } catch (error) {
+    console.error('Error fetching sheet data:', error);
+    res.status(500).json({ error: 'Failed to fetch sheet data' });
   }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
+});
+app.post('/api/alert-trials', async (req, res) => {
+  try {
+    // Fetch all rows from the Google Sheet
+    const result = await sheets.spreadsheets.values.get({
+      auth: await auth.getClient(),
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${SHEET_NAME}!A2:E`
+    });
+
+    const rows = result.data.values;
+    const alertPromises = [];
+
+    if (!rows || rows.length === 0) {
+      return res.status(200).json({ message: 'No data found to check' });
+    }
+
+    rows.forEach((row, i) => {
+      const service = row[0];
+      const currentStatus = row[1];
+      const lastSeen = row[2];
+      const alertSent = row[4] === 'TRUE';
+
+      // Check if trial status has changed since the last check
+      if (currentStatus === 'Not Available' && !alertSent) {
+        // Send an alert if status is 'Not Available' and no alert has been sent
+        alertPromises.push(sendAlert(service, lastSeen, currentStatus, i + 2));  // `i + 2` to account for headers
+      }
+    });
+
+    // Wait for all alert sending to complete
+    await Promise.all(alertPromises);
+
+    res.status(200).json({ message: 'Alerts processed successfully' });
+
+  } catch (error) {
+    console.error('Error processing alerts:', error);
+    res.status(500).json({ error: 'Failed to process alerts' });
+  }
+});
+const nodemailer = require('nodemailer');
+
+async function sendAlert(service, lastSeen, currentStatus, rowIndex) {
+  // Create a transporter using an SMTP service (e.g., Gmail)
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: 'sholane75@gmail.com',
+      pass: 'SAINTS*john71123',
+    },
+  });
+
+  // Set up the email details
+  const mailOptions = {
+    from: 'your-email@gmail.com',
+    to: 'recipient-email@example.com',
+    subject: `${service} Trial Status Update`,
+    text: `The trial for ${service} has changed. Last seen: ${lastSeen}. New status: ${currentStatus}.`,
+  };
+
+  // Send the email
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Alert sent for ${service}`);
+
+    // Update the Google Sheet to flag the alert as sent
+    await sheets.spreadsheets.values.update({
+      auth: await auth.getClient(),
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${SHEET_NAME}!E${rowIndex}`,
+      valueInputOption: 'RAW',
+      resource: {
+        values: [['TRUE']], // Mark "Alert Sent" as TRUE
+      },
+    });
+
+  } catch (error) {
+    console.error('Error sending alert:', error);
+  }
+}

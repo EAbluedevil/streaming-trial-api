@@ -10,8 +10,9 @@ const PORT = process.env.PORT || 4000;
 // Authenticate Google Sheets API
 const auth = new google.auth.GoogleAuth({
   keyFile: './credentials.json',
-  scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+  scopes: ['https://www.googleapis.com/auth/spreadsheets']
 });
+
 const sheets = google.sheets({ version: 'v4', auth });
 
 const SPREADSHEET_ID = '1jc_BuWam_WzjS0LUvdBkfg_CLQz82LhCqhW3TtSf65A';

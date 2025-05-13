@@ -94,40 +94,39 @@ app.post('/api/alert-trials', async (req, res) => {
 const nodemailer = require('nodemailer');
 
 async function sendAlert(service, lastSeen, currentStatus, rowIndex) {
-  // Create a transporter using an SMTP service (e.g., Gmail)
+  console.log(`sendAlert triggered for ${service} - Row ${rowIndex}`);
+
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: 'sholane75@gmail.com',
-      pass: 'SAINTS*john71123',
+      user: process.env.ALERT_EMAIL,
+      pass: process.env.ALERT_PASS,
     },
   });
 
-  // Set up the email details
   const mailOptions = {
-    from: 'your-email@gmail.com',
-    to: 'recipient-email@example.com',
+    from: process.env.ALERT_EMAIL,
+    to: process.env.ALERT_EMAIL,
     subject: `${service} Trial Status Update`,
     text: `The trial for ${service} has changed. Last seen: ${lastSeen}. New status: ${currentStatus}.`,
   };
 
-  // Send the email
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`Alert sent for ${service}`);
+    console.log(`✅ Email sent for ${service}`);
 
-    // Update the Google Sheet to flag the alert as sent
     await sheets.spreadsheets.values.update({
       auth: await auth.getClient(),
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAME}!E${rowIndex}`,
       valueInputOption: 'RAW',
       resource: {
-        values: [['TRUE']], // Mark "Alert Sent" as TRUE
+        values: [['TRUE']],
       },
     });
 
+    console.log(`✅ Sheet updated for row ${rowIndex}`);
   } catch (error) {
-    console.error('Error sending alert:', error);
+    console.error(`❌ Error in sendAlert for ${service}:`, error);
   }
 }

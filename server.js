@@ -122,7 +122,7 @@ async function sendAlert(service, lastSeen, currentStatus, rowIndex) {
       range: `${SHEET_NAME}!E${rowIndex}`,
       valueInputOption: 'RAW',
       resource: {
-        values: [['TRUE']],
+        values: [['true']],
       },
     });
 

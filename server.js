@@ -120,7 +120,7 @@ async function sendAlert(service, lastSeen, currentStatus, rowIndex) {
       auth: await auth.getClient(),
       spreadsheetId: SPREADSHEET_ID,
       range: `${SHEET_NAME}!E${rowIndex}`,
-      valueInputOption: 'RAW',
+      valueInputOption: 'USER_ENTERED',
       resource: {
         values: [['true']],
       },

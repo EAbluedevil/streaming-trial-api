@@ -133,3 +133,35 @@ async function sendAlert(service, lastSeen, currentStatus, rowIndex) {
     console.error(`❌ Error in sendAlert for ${service}:`, error);
   }
 }
+app.use(express.json()); // Add this near the top if it's not already there
+
+app.post('/api/signup-email', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Invalid email' });
+  }
+
+  try {
+    const authClient = await auth.getClient();
+
+    const timestamp = new Date().toISOString();
+
+    await sheets.spreadsheets.values.append({
+      auth: authClient,
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'EmailSignups!A2:B2',
+      valueInputOption: 'USER_ENTERED',
+      resource: {
+        values: [[email, timestamp]],
+      },
+    });
+
+    console.log(`✅ New email signup: ${email}`);
+    res.status(200).json({ message: 'Thanks for signing up!' });
+
+  } catch (error) {
+    console.error('❌ Failed to store email:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});

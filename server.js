@@ -18,7 +18,7 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: 'v4', auth });
 
 const SPREADSHEET_ID = '1jc_BuWam_WzjS0LUvdBkfg_CLQz82LhCqhW3TtSf65A';
-const SHEET_NAME = 'Trial_Tracker';
+const SHEET_NAME = 'Trial Tracker';
 
 app.get('/api/streaming-trials', async (req, res) => {
   try {

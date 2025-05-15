@@ -4,7 +4,9 @@ const fs = require('fs');
 const cors = require('cors');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: 'https://streaming-trial-ui.vercel.app'
+}));
 const PORT = process.env.PORT || 4000;
 
 // Authenticate Google Sheets API

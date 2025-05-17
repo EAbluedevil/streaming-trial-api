@@ -150,7 +150,7 @@ app.post('/api/signup-email', async (req, res) => {
     await sheets.spreadsheets.values.append({
       auth: authClient,
       spreadsheetId: SPREADSHEET_ID,
-      range: 'EmailSignups!A2:B2',
+      range: 'Email Signups!A2:B2',
       valueInputOption: 'USER_ENTERED',
       resource: {
         values: [[email, timestamp]],
